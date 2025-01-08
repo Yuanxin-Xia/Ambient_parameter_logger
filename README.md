@@ -3,7 +3,8 @@ Ambient temperature:
 STS35 sensor
 Resolution: 0.01 degree
 Accuracy: 0.1 degree
- 
+
+ 
 Relative humidity:
 
 SHT40 sensor
