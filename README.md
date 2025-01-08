@@ -20,11 +20,17 @@ Resolution: 0.02hPa
 Accuracy: 0.03Pa
 
 ### Microcontroller: ESP32 CH340
-## Hardware solering:
+## Hardware soldering:
+
 ESP32 SDA (pin21) -> all senser SDA in parallel
+
 ESP32 SCL (pin22) -> all senser SCL in parallel
+
 ESP32 3.3v  -> all senser VDD in paralle
-ESP32 GND  -> all senser GND in paralle
+
+ESP32 GND  -> all senser GND in paralle, LED negative pin
+
+ESP32 GPIO 16  -> LED positive pin (with a 220 ohm resistor)
 
 # Software:
 ## GUI package:
