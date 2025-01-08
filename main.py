@@ -1,4 +1,3 @@
-# import tkinter as tk
 from tkinter import StringVar, Text, Tk, ttk, filedialog, messagebox
 from serial import Serial, tools
 import serial.tools.list_ports
@@ -6,6 +5,7 @@ from threading import Thread
 from csv import writer as csvwriter
 import os.path as ospath
 from time import strftime, sleep
+from math import sqrt
 
 class SerialCSVLogger:
     def __init__(self, root):
@@ -23,8 +23,23 @@ class SerialCSVLogger:
         self.selected_port = StringVar(value="")
         self.selected_baud = StringVar(value="115200")
 
-        # New: Interval (ms)
+        # Interval (ms)
         self.interval_var = StringVar(value="5000")  # default 5s
+
+        # ------------- Online stats for T, H, P -------------
+        # Each parameter has count, mean, M2 (for variance calc)
+        self.t_count = 0
+        self.t_mean = 0.0
+        self.t_M2 = 0.0
+
+        self.h_count = 0
+        self.h_mean = 0.0
+        self.h_M2 = 0.0
+
+        self.p_count = 0
+        self.p_mean = 0.0
+        self.p_M2 = 0.0
+        # ---------------------------------------------------
 
         # Build UI
         self.create_widgets()
@@ -149,8 +164,8 @@ class SerialCSVLogger:
         if new_file:
             try:
                 with open(csv_path, "w", newline="", encoding="utf-8") as f:
-                    writer = csvwriter(f)
-                    writer.writerow(["Time", "Temperature", "Humidity", "Pressure"])
+                    w = csvwriter(f)
+                    w.writerow(["Time", "Temperature", "Humidity", "Pressure"])
             except Exception as e:
                 messagebox.showerror("Error", f"Cannot create CSV file:\n{e}")
                 self.ser.close()
@@ -167,6 +182,9 @@ class SerialCSVLogger:
         else:
             self.log_text.insert("end", "Warning: Interval is not numeric, skipping GAP command.\n")
             self.log_text.see("end")
+
+        # Reset stats counters before new logging session
+        self.reset_stats()
 
         # Start background reading
         self.running = True
@@ -185,6 +203,9 @@ class SerialCSVLogger:
         self.log_text.insert("end", f"[{strftime('%H:%M:%S')}] Logging stopped. Port closed.\n")
         self.log_text.see("end")
 
+        # After stopping, compute and print final statistics
+        self.print_final_stats()
+
     def read_serial_data(self, csv_path):
         while self.running:
             try:
@@ -201,11 +222,18 @@ class SerialCSVLogger:
                                 pres = float(parts[3])
                             except ValueError:
                                 continue
+                            # Write to CSV
                             with open(csv_path, "a", newline="", encoding="utf-8") as f:
-                                writer = csvwriter(f)
-                                writer.writerow([timestamp_str, temp, humi, pres])
+                                w = csvwriter(f)
+                                w.writerow([timestamp_str, temp, humi, pres])
+                            # Show in log text
                             self.log_text.insert("end", f"{timestamp_str}, T={temp}, H={humi}, P={pres}\n")
                             self.log_text.see("end")
+
+                            # Update online stats
+                            self.update_stats_temp(temp)
+                            self.update_stats_humi(humi)
+                            self.update_stats_pres(pres)
                         else:
                             # Could be "DATA,ERROR" or any other format
                             self.log_text.insert("end", line + "\n")
@@ -223,6 +251,99 @@ class SerialCSVLogger:
 
         if self.ser and self.ser.is_open:
             self.ser.close()
+
+    # --------------------------
+    # Online Stats Methods
+    # --------------------------
+    def reset_stats(self):
+        """Reset counters for a new logging session."""
+        self.t_count = 0
+        self.t_mean = 0.0
+        self.t_M2 = 0.0
+
+        self.h_count = 0
+        self.h_mean = 0.0
+        self.h_M2 = 0.0
+
+        self.p_count = 0
+        self.p_mean = 0.0
+        self.p_M2 = 0.0
+
+    def update_stats_temp(self, x):
+        # Welford for temperature
+        self.t_count += 1
+        delta = x - self.t_mean
+        self.t_mean += delta / self.t_count
+        delta2 = x - self.t_mean
+        self.t_M2 += delta * delta2
+
+    def update_stats_humi(self, x):
+        # Welford for humidity
+        self.h_count += 1
+        delta = x - self.h_mean
+        self.h_mean += delta / self.h_count
+        delta2 = x - self.h_mean
+        self.h_M2 += delta * delta2
+
+    def update_stats_pres(self, x):
+        # Welford for pressure
+        self.p_count += 1
+        delta = x - self.p_mean
+        self.p_mean += delta / self.p_count
+        delta2 = x - self.p_mean
+        self.p_M2 += delta * delta2
+
+    def print_final_stats(self):
+        """Compute final average/std dev and print them in the log text."""
+        # Temperature
+        if self.t_count > 1:
+            t_var = self.t_M2 / (self.t_count - 1)
+            t_std = sqrt(t_var)
+            self.log_text.insert(
+                "end",
+                f"Temperature: count={self.t_count}, mean={self.t_mean:.2f}, std={t_std:.2f}\n"
+            )
+        elif self.t_count == 1:
+            self.log_text.insert(
+                "end",
+                f"Temperature: count=1, mean={self.t_mean:.2f}, std=0.00 (only one sample)\n"
+            )
+        else:
+            self.log_text.insert("end", "No temperature data recorded.\n")
+
+        # Humidity
+        if self.h_count > 1:
+            h_var = self.h_M2 / (self.h_count - 1)
+            h_std = sqrt(h_var)
+            self.log_text.insert(
+                "end",
+                f"Humidity: count={self.h_count}, mean={self.h_mean:.2f}, std={h_std:.2f}\n"
+            )
+        elif self.h_count == 1:
+            self.log_text.insert(
+                "end",
+                f"Humidity: count=1, mean={self.h_mean:.2f}, std=0.00 (only one sample)\n"
+            )
+        else:
+            self.log_text.insert("end", "No humidity data recorded.\n")
+
+        # Pressure
+        if self.p_count > 1:
+            p_var = self.p_M2 / (self.p_count - 1)
+            p_std = sqrt(p_var)
+            self.log_text.insert(
+                "end",
+                f"Pressure: count={self.p_count}, mean={self.p_mean:.2f}, std={p_std:.2f}\n"
+            )
+        elif self.p_count == 1:
+            self.log_text.insert(
+                "end",
+                f"Pressure: count=1, mean={self.p_mean:.2f}, std=0.00 (only one sample)\n"
+            )
+        else:
+            self.log_text.insert("end", "No pressure data recorded.\n")
+
+        self.log_text.see("end")
 
 def main():
     root = Tk()
