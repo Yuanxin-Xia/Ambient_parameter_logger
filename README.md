@@ -15,3 +15,11 @@ Barometric pressure:
 BMP390L
 Resolution: 0.02hPa
 Accuracy: 0.03Pa
+
+GUI package:
+C:\Users\Xia\AppData\Local\Programs\Python\Python39\python.exe -m PyInstaller ^
+--onefile ^
+--windowed ^
+--icon=icon.ico ^
+--name=AmbientMonitor ^
+E:\Python_GUI\Ambient_monitor\main.py
