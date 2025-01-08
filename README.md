@@ -16,6 +16,8 @@ BMP390L
 Resolution: 0.02hPa
 Accuracy: 0.03Pa
 
+Microcontroller: ESP32 CH340
+
 GUI package:
 
 C:\Users\Xia\AppData\Local\Programs\Python\Python39\python.exe -m PyInstaller ^
